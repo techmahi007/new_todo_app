@@ -1,0 +1,36 @@
+---
+
+- name: Push todo-app image to docker hub
+  hosts: all
+  become: true
+  tasks:
+
+    - name: install pre-requisites
+      command: pip3 install openshift pyyaml kubernetes
+
+    - name: build docker image
+      command: docker build -t my-todo-app /home/mahinma/my-todo-app/code
+
+    - name: adding tag to the image
+      command: docker tag my-todo-app techmahi2001/my-todo-app
+
+    - name: push the image to dockerhub
+      command: docker push techmahi2001/my-todo-app
+
+    - name: remove image from local
+      command: docker rmi my-todo-app techmahi2001/my-todo-app
+      ignore_errors: yes
+
+
+- name: Deploy the app using Kubernetes
+  hosts: localhost
+  become: true
+  tasks:
+
+    - name: apply k8s deployment
+      command: kubectl create deploy my-todo-app-deployment --replicas=3 --image techmahi2001/my-todo-app
+      ignore_errors: yes
+
+    - name: expose the app using service
+      command: kubectl expose deploy my-todo-app-deployment --port=8501 --type=NodePort
+      ignore_errors: yes
