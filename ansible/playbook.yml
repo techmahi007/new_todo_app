@@ -1,31 +1,69 @@
 ---
 
-- name: Push todo-app image to docker hub
+- name: install the required packages
   hosts: all
   become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
   tasks:
 
-    - name: install pre-requisites
-      command: pip3 install openshift pyyaml kubernetes
+    - name: Check if pip is installed
+      command: pip3 --version
+      register: pip_version
+      ignore_errors: true
+
+    - name: install pip
+      package:
+        name: python3-pip
+        state: present
+      when: pip_version.rc != 0
+
+    - name: install docker sdk for python
+      pip:
+        name: docker
+
+
+- name: build and push todo-app image to docker hub
+  hosts: all
+  become: true
+  vars_files:
+    - docker_credentials.yml
+  tasks:
+
+    - name: copy code files
+      copy:
+        src: /home/mahinma/my-todo-app/code
+        dest: /home/ansible_user/
 
     - name: build docker image
-      command: docker build -t my-todo-app /home/mahinma/my-todo-app/code
+      command: docker build -t my-todo-app /home/ansible_user/code
 
     - name: adding tag to the image
       command: docker tag my-todo-app techmahi2001/my-todo-app
 
+    - name: login to docker hub
+      docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+
     - name: push the image to dockerhub
       command: docker push techmahi2001/my-todo-app
 
-    - name: remove image from local
+    - name: remove the image from server
       command: docker rmi my-todo-app techmahi2001/my-todo-app
-      ignore_errors: yes
 
 
 - name: Deploy the app using Kubernetes
-  hosts: localhost
+  hosts: all
   become: true
+
   tasks:
+
+    - name: set KUBECONFIG environment variable
+      command: kubectl get pods
+      environment:
+        KUBECONFIG: /home/mahinma/.kube/config
 
     - name: apply k8s deployment
       command: kubectl create deploy my-todo-app-deployment --replicas=3 --image techmahi2001/my-todo-app
@@ -34,3 +72,4 @@
     - name: expose the app using service
       command: kubectl expose deploy my-todo-app-deployment --port=8501 --type=NodePort
       ignore_errors: yes
+
